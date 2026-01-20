@@ -61,5 +61,6 @@ EXPOSE 4201
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:4201/health || exit 1
 
-# Start the application directly
-CMD ["node", "dist/src/main.js"]
+# Start the application (migrations + start in one go)
+# We use npx to ensure we use the local prisma binary
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]

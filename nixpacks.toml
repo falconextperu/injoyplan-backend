@@ -8,4 +8,4 @@ cmds = ["pnpm install --frozen-lockfile"]
 cmds = ["pnpm exec prisma generate", "pnpm run build"]
 
 [start]
-cmd = "MAIN_FILE=$(find dist -name main.js | head -n 1); echo \"Found main at: $MAIN_FILE\"; pnpm exec prisma migrate deploy && node $MAIN_FILE"
+cmd = "ls -R dist && pnpm exec prisma migrate deploy && node dist/src/main.js"

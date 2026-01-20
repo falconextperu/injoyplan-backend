@@ -8,7 +8,7 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     private uploadService: UploadService,
-  ) {}
+  ) { }
 
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -76,9 +76,34 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, updateProfileDto: UpdateProfileDto) {
+    const { username, email, password, birthDate, ...profileData } = updateProfileDto;
+
+    // 1. Update User entity if needed
+    if (username || email || password) {
+      const updateData: any = {};
+      if (username) updateData.username = username;
+      if (email) updateData.email = email;
+      if (password) {
+        const bcrypt = await import('bcrypt');
+        updateData.password = await bcrypt.hash(password, 10);
+      }
+
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+      });
+    }
+
+    // 2. Prepare Profile data
+    const finalProfileData: any = { ...profileData };
+    if (birthDate) {
+      finalProfileData.birthDate = new Date(birthDate);
+    }
+
+    // 3. Update Profile entity
     const profile = await this.prisma.profile.update({
       where: { userId },
-      data: updateProfileDto,
+      data: finalProfileData,
     });
 
     return profile;

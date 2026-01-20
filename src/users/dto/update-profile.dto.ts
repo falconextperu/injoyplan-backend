@@ -33,5 +33,30 @@ export class UpdateProfileDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  country?: string;
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  @MaxLength(10)
+  gender?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  birthDate?: string; // string format YYYY-MM-DD
+
+  // User fields
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  username?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  email?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  password?: string;
 }

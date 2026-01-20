@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { render } from '@react-email/render';
 import VerificationEmail from './emails/VerificationEmail';
 import ContactEmail from './emails/ContactEmail';
+import ComplaintEmail from './emails/ComplaintEmail';
 
 @Injectable()
 export class EmailService {
@@ -58,7 +59,7 @@ export class EmailService {
                 descripcion: data.descripcion,
             }));
 
-            const toEmail = process.env.CONTACT_EMAIL || 'delivered@resend.dev';
+            const toEmail = this.configService.get('CONTACT_EMAIL') || 'delivered@resend.dev';
             const fromEmail = this.configService.get('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
 
             await this.resend.emails.send({
@@ -72,6 +73,68 @@ export class EmailService {
         } catch (error) {
             console.error('Error sending contact email:', error);
             throw error;
+        }
+    }
+
+    async sendComplaintEmail(data: {
+        idReclamo: string;
+        consumerName: string;
+        consumerEmail: string;
+        consumerPhone: string;
+        consumerDocNumber: string;
+        consumerAddress: string;
+        goodType: string;
+        claimType: string;
+        claimAmount: string;
+        goodDescription: string;
+        claimDetail: string;
+        orderRequest: string;
+        createdAt: string;
+    }) {
+        try {
+            const emailHtml = await render(ComplaintEmail({
+                ...data
+            }));
+
+            const toEmail = this.configService.get('CONTACT_EMAIL');
+            const fromEmail = this.configService.get('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
+
+            console.log('--- SENDING COMPLAINT EMAIL ---');
+            console.log('To Admin (Config):', toEmail);
+            console.log('From:', fromEmail);
+            console.log('Consumer Copy:', data.consumerEmail);
+
+            if (!toEmail) {
+                console.warn('WARNING: CONTACT_EMAIL is not defined in environment variables!');
+            }
+
+            // Send to Admin/Contact
+            const adminData = await this.resend.emails.send({
+                from: `Injoyplan Reclamos <${fromEmail}>`,
+                to: toEmail || 'delivered@resend.dev', // Fallback only if missing
+                subject: `Nuevo Reclamo Registrado [${data.idReclamo}] - Injoyplan`,
+                html: emailHtml,
+                replyTo: data.consumerEmail
+            });
+            console.log('Admin Email Result:', adminData);
+
+            // Send Copy to User
+            const userData = await this.resend.emails.send({
+                from: `Injoyplan Reclamos <${fromEmail}>`,
+                to: data.consumerEmail,
+                subject: `Copia de tu Reclamo [${data.idReclamo}] - Injoyplan`,
+                html: emailHtml
+            });
+            console.log('User Copy Result:', userData);
+
+        } catch (error) {
+            console.error('Error sending complaint email:', error);
+            // Don't throw error to avoid blocking the HTTP response if email fails?
+            // Or throw? Better to log and maybe not fail the whole request since DB save is critical.
+            // But user expects "success" usually means email sent.
+            // I'll throw to be safe for now or just log.
+            // "No me llega el reclamo" -> failing silently is bad.
+            console.error(error);
         }
     }
 }

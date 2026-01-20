@@ -23,6 +23,8 @@ export class EventsController {
 
   @Public()
   @Get()
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Listar eventos (paginado)' })
   findAll(
     @Query('page', new ParseIntPipe({ optional: true })) page?: number,
@@ -31,6 +33,7 @@ export class EventsController {
     @Query('isFeatured') isFeatured?: string, // 'true', 'false'
     @Query('includeInactive') includeInactive?: string, // Legacy support
     @Query('excludeFeatured') excludeFeatured?: string, // Legacy support
+    @GetUser('id') userId?: string,
   ) {
     // Legacy mapping
     let finalStatus = status;
@@ -43,14 +46,16 @@ export class EventsController {
     // Legacy exclude mapping overrides if specific isFeatured not set
     if (excludeFeatured === 'true' && finalIsFeatured === undefined) finalIsFeatured = false;
 
-    return this.eventsService.findAll(page, limit, finalStatus, finalIsFeatured);
+    return this.eventsService.findAll(page, limit, finalStatus, finalIsFeatured, userId);
   }
 
   @Public()
   @Get('featured')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Listar eventos destacados' })
-  featured() {
-    return this.eventsService.findFeatured();
+  featured(@GetUser('id') userId?: string) {
+    return this.eventsService.findFeatured(userId);
   }
 
   @Public()
@@ -272,6 +277,7 @@ export class EventsController {
     @Query('enCurso') enCurso?: boolean,
     @Query('horaInicio') horaInicio?: string,
     @Query('horaFin') horaFin?: string,
+    @Query('excludeFeatured') excludeFeatured?: string,
     @Query('page', new ParseIntPipe({ optional: true })) page?: number,
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
     @GetUser('id') userId?: string,
@@ -288,6 +294,7 @@ export class EventsController {
       enCurso,
       horaInicio,
       horaFin,
+      excludeFeatured: excludeFeatured === 'true',
       page,
       limit,
       userId,

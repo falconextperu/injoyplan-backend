@@ -10,6 +10,7 @@ import {
     Preview,
     Section,
     Text,
+    Hr,
 } from '@react-email/components';
 
 interface VerificationEmailProps {
@@ -20,46 +21,39 @@ export const VerificationEmail = ({ code }: VerificationEmailProps) => {
     return (
         <Html>
             <Head />
-            <Preview>Tu código de verificación de Injoyplan es {code}</Preview>
+            <Preview>Verifica tu cuenta en Injoyplan</Preview>
             <Body style={main}>
                 <Container style={container}>
-                    {/* Header Section */}
-                    <Section style={header}>
-                        <Img
-                            src="https://res.cloudinary.com/djv4z61q9/image/upload/v1766094464/injoy-logo.png" // Placeholder or user provided logo
-                            width="150"
-                            height="auto"
-                            alt="Injoyplan"
-                            style={logo}
-                        />
-                        <Heading style={headerTitle}>
-                            <span style={{ color: '#00DFD1' }}>VERIFICA</span><br />
-                            <span style={{ color: '#00DFD1' }}>TU CORREO</span><br />
-                            <span style={{ color: '#FFFFFF', fontSize: '16px', fontWeight: 'normal', fontFamily: 'sans-serif', fontStyle: 'italic' }}>ESTÁS A UN PASO</span>
-                        </Heading>
-
-                        <Section style={iconRow}>
-                            <Text style={{ fontSize: '24px', margin: '0 5px' }}>✉️</Text>
-                            <Text style={{ fontSize: '24px', margin: '0 5px' }}>🌟</Text>
-                            <Text style={{ fontSize: '24px', margin: '0 5px' }}>✅</Text>
+                    <Section style={box}>
+                        <Section style={logoContainer}>
+                            <Img
+                                src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ2VvetN6v-8ZlB3RT4zSBjBnTbOVleM7XRAA&s"
+                                width="120"
+                                height="auto"
+                                alt="Injoyplan"
+                                style={logo}
+                            />
                         </Section>
-                    </Section>
 
-                    {/* Content Section */}
-                    <Section style={content}>
+                        <Heading style={heading}>Verifica tu correo electrónico</Heading>
                         <Text style={paragraph}>
-                            Ingresa este código para completar la verificación de tu correo.
+                            Gracias por registrarte en Injoyplan. Para completar tu registro y asegurar tu cuenta, por favor ingresa el siguiente código de verificación:
                         </Text>
 
-                        <Section style={codeBox}>
-                            <Text style={codeLabel}>El código es: 👇</Text>
-                            <Section style={codeContainer}>
-                                <Text style={codeText}>{code}</Text>
-                            </Section>
+                        <Section style={codeContainer}>
+                            <Text style={codeText}>{code}</Text>
                         </Section>
 
-                        <Text style={footerText}>
-                            Si tu no has creado tu cuenta en Injoyplan, por favor ignora este correo electrónico.
+                        <Text style={paragraph}>
+                            Este código expirará en 10 minutos. Si no solicitaste este código, puedes ignorar este mensaje de forma segura.
+                        </Text>
+
+                        <Hr style={hr} />
+
+                        <Text style={footer}>
+                            &copy; {new Date().getFullYear()} Injoyplan. Todos los derechos reservados.
+                            <br />
+                            <Link href="https://injoyplan.com" style={anchor}>www.injoyplan.com</Link>
                         </Text>
                     </Section>
                 </Container>
@@ -72,91 +66,80 @@ export default VerificationEmail;
 
 const main = {
     backgroundColor: '#f6f9fc',
-    fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif',
+    fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif',
 };
 
 const container = {
     backgroundColor: '#ffffff',
     margin: '0 auto',
-    padding: '0',
+    padding: '40px 0',
     marginBottom: '64px',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    maxWidth: '600px',
 };
 
-const header = {
-    backgroundColor: '#0B0E14',
-    padding: '40px 20px',
+const box = {
+    padding: '0 48px',
+};
+
+const logoContainer = {
+    marginBottom: '32px',
     textAlign: 'center' as const,
 };
 
 const logo = {
-    margin: '0 auto 20px',
-    display: 'block',
-    filter: 'brightness(0) invert(1) drop-shadow(0 0 4px #00DFD1)', // Make logo white/glow if possible, or assume white logo
+    margin: '0 auto',
 };
 
-const headerTitle = {
-    color: '#00DFD1',
-    fontSize: '42px',
-    fontWeight: '900',
-    lineHeight: '1',
-    margin: '0',
-    textTransform: 'uppercase' as const,
-    fontFamily: 'Arial Black, Arial, sans-serif',
-};
-
-const iconRow = {
-    textAlign: 'center' as const,
-    marginTop: '20px',
-};
-
-const content = {
-    padding: '40px 40px',
+const heading = {
+    fontSize: '24px',
+    letterSpacing: '-0.5px',
+    lineHeight: '1.3',
+    fontWeight: '700',
+    color: '#212121',
+    marginTop: '0',
+    marginBottom: '24px',
     textAlign: 'center' as const,
 };
 
 const paragraph = {
     fontSize: '16px',
     lineHeight: '26px',
-    color: '#525f7f',
-    marginBottom: '20px',
-};
-
-const codeBox = {
-    backgroundColor: '#F9FAFB',
-    borderRadius: '16px',
-    padding: '30px',
-    margin: '30px 0',
-};
-
-const codeLabel = {
-    fontSize: '14px',
-    fontWeight: 'bold',
-    color: '#212121',
-    margin: '0 0 10px',
+    color: '#666666',
+    marginBottom: '24px',
+    textAlign: 'center' as const,
 };
 
 const codeContainer = {
-    backgroundColor: '#E8F1F5',
-    borderRadius: '10px',
-    padding: '10px',
-    border: '1px solid #D0DCE3',
-    width: 'fit-content',
-    margin: '0 auto',
+    backgroundColor: '#F0F8FA', // Light blue tint based on #007FA4
+    borderRadius: '12px',
+    padding: '24px',
+    marginBottom: '32px',
+    textAlign: 'center' as const,
+    border: '1px solid #E1E8ED',
 };
 
 const codeText = {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    color: '#212121',
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    fontSize: '36px',
+    letterSpacing: '8px',
+    color: '#007FA4', // Brand color
     margin: '0',
-    letterSpacing: '4px',
+    lineHeight: '1',
 };
 
-const footerText = {
-    fontSize: '12px',
+const hr = {
+    borderColor: '#e6ebf1',
+    margin: '32px 0',
+};
+
+const footer = {
     color: '#8898aa',
-    marginTop: '20px',
+    fontSize: '12px',
+    lineHeight: '16px',
+    textAlign: 'center' as const,
+};
+
+const anchor = {
+    color: '#007FA4',
+    textDecoration: 'none',
 };

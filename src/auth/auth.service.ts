@@ -42,7 +42,31 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('El email ya está registrado');
+      if (existingUser.isVerified) {
+        throw new ConflictException('El email ya está registrado');
+      } else {
+        // User exists but is not verified. Resend verification code.
+        const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Update user with new token
+        await this.prisma.user.update({
+          where: { id: existingUser.id },
+          data: { verificationToken }
+        });
+
+        // Send verification email
+        try {
+          await this.emailService.sendVerificationEmail(email, verificationToken);
+        } catch (emailError) {
+          console.error('Failed to send verification email:', emailError);
+        }
+
+        return {
+          message: 'Usuario registrado exitosamente. Por favor verifica tu email.',
+          userId: existingUser.id,
+          email: existingUser.email
+        };
+      }
     }
 
     // Hash password

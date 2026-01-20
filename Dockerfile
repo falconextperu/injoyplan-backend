@@ -58,5 +58,8 @@ EXPOSE 4201
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:4201/health || exit 1
 
-# Start the application (run migrations first, then start with error handling)
-CMD ["sh", "-c", "set -e && echo 'Running migrations...' && pnpm exec prisma migrate deploy && echo 'Migrations complete. Starting application...' && ls -la dist/src/main.js && node dist/src/main.js"]
+# Copy startup script
+COPY start.sh ./
+
+# Start the application using the script
+CMD ["sh", "start.sh"]

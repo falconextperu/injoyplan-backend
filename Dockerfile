@@ -11,14 +11,11 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
-
-# Copy Prisma schema first (needed for generate)
+# Copy Prisma schema FIRST (before install so postinstall can work)
 COPY prisma ./prisma/
 
-# Generate Prisma client using the installed (pinned) version
-RUN pnpm exec prisma generate
+# Install dependencies
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -39,20 +36,17 @@ RUN apk add --no-cache openssl && corepack enable && corepack prepare pnpm@lates
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install only production dependencies (ignore scripts to prevent postinstall)
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
-
-# Install Prisma CLI explicitly for migrations and generation (matching version)
-RUN pnpm add -D prisma@5.22.0
-
-# Copy Prisma schema from builder
+# Copy Prisma schema FIRST
 COPY --from=builder /app/prisma ./prisma/
+
+# Install only production dependencies
+RUN pnpm install --frozen-lockfile --prod
+
+# Install Prisma CLI explicitly for migrations
+RUN pnpm add -D prisma@5.22.0
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
-
-# Generate Prisma client in production image (now that Prisma CLI is available)
-RUN pnpm exec prisma generate
 
 # Expose the port
 EXPOSE 4201

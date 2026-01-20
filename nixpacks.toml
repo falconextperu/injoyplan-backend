@@ -8,4 +8,4 @@ cmds = ["pnpm install --frozen-lockfile"]
 cmds = ["pnpm exec prisma generate", "pnpm run build"]
 
 [start]
-cmd = "ls -R dist && pnpm exec prisma migrate deploy && node dist/src/main.js"
+cmd = "ls -R dist && ls -R prisma/migrations && pnpm exec prisma migrate deploy && node dist/src/main.js"

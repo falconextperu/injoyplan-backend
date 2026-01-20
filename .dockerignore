@@ -1,51 +1,29 @@
-# Dependencies
-node_modules
+# Ignorar node_modules
+node_modules/
 npm-debug.log
+yarn-error.log
+pnpm-debug.log
 
-# Build output
-dist
+# Ignorar archivos de build
+dist/
+build/
+.next/
 
-# Git
-.git
-.gitignore
+# Ignorar archivos de entorno
+.env
+.env.local
+.env.*.local
 
-# IDE
-.idea
-.vscode
+# Ignorar archivos de test
+coverage/
+*.log
+
+# Ignorar archivos de IDE
+.vscode/
+.idea/
 *.swp
 *.swo
 
-# OS
+# Ignorar archivos de sistema
 .DS_Store
 Thumbs.db
-
-# Environment files (build with --build-arg or use docker-compose)
-.env
-.env.*
-!.env.example
-
-# Test files
-*.spec.ts
-*.test.ts
-coverage
-.nyc_output
-
-# Documentation
-README.md
-docs
-
-# Docker
-Dockerfile*
-docker-compose*
-.dockerignore
-
-# Prisma migrations history (not needed in container)
-# prisma/migrations - Keep this if you need migrations in container
-
-# Logs
-logs
-*.log
-
-# Temp files
-tmp
-temp

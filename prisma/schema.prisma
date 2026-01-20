@@ -161,6 +161,10 @@ model Event {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([category])
+  @@index([isActive, isFeatured])
   @@map("events")
 }
 
@@ -175,6 +179,10 @@ model EventDate {
   capacity  Int?
   createdAt DateTime @default(now())
 
+  @@index([eventId])
+  @@index([date])
+  @@index([price])
+  @@index([startTime])
   @@map("event_dates")
 }
 
@@ -189,6 +197,9 @@ model Location {
   longitude   Float?
   events      Event[]
   
+  @@index([department])
+  @@index([province])
+  @@index([district])
   @@map("locations")
 }
 

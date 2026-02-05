@@ -19,32 +19,34 @@ export class CreateComplaintDto {
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   consumerAddress: string;
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   consumerDepartment: string;
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   consumerProvince: string;
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   consumerDistrict: string;
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   consumerPhone: string;
 
   @ApiProperty()
+  // @IsEmail() // Email validation might fail on empty string, let's keep it if not empty or use ValidateIf
+  @ValidateIf((o) => o.consumerEmail && o.consumerEmail.length > 0)
   @IsEmail()
-  @IsNotEmpty()
+  @IsOptional()
   consumerEmail: string;
 
   @ApiProperty()

@@ -304,16 +304,31 @@ export class EventsService {
     ]);
 
     // Filter out past dates from each event
+    // Filter out past dates from each event and sort them
     const filteredData = data
-      .map(event => ({
-        ...event,
-        dates: event.dates.filter(date => {
+      .map(event => {
+        // Filter dates
+        const upcomingDates = event.dates.filter(date => {
           const eventDate = new Date(date.date);
           eventDate.setHours(0, 0, 0, 0);
           return eventDate >= today;
-        }),
-      }))
-      .filter(event => event.dates.length > 0); // Only include events with future dates
+        });
+
+        // Sort dates ascending (nearest first)
+        upcomingDates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        return {
+          ...event,
+          dates: upcomingDates,
+        };
+      })
+      .filter(event => event.dates.length > 0) // Only include events with future dates
+      .sort((a, b) => {
+        // Sort events by their first (nearest) date
+        const dateA = a.dates[0] ? new Date(a.dates[0].date).getTime() : Infinity;
+        const dateB = b.dates[0] ? new Date(b.dates[0].date).getTime() : Infinity;
+        return dateA - dateB;
+      });
 
     return {
       data: filteredData,

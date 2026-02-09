@@ -750,11 +750,12 @@ export class EventsService {
     horaInicio?: string;
     horaFin?: string;
     excludeFeatured?: boolean;
+    expandDates?: boolean;
     page?: number;
     limit?: number;
     userId?: string;
   }) {
-    const { categoria, departamento, provincia, distrito, fechaInicio, fechaFin, busqueda, esGratis, enCurso, horaInicio, horaFin, excludeFeatured, page = 1, limit = 20, userId } = filters;
+    const { categoria, departamento, provincia, distrito, fechaInicio, fechaFin, busqueda, esGratis, enCurso, horaInicio, horaFin, excludeFeatured, expandDates = true, page = 1, limit = 20, userId } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = { isActive: true };
@@ -930,6 +931,53 @@ export class EventsService {
     filterDate.setHours(0, 0, 0, 0);
 
 
+
+    // If expandDates is false, return unique events (without date expansion)
+    if (!expandDates) {
+      const events = paginatedEvents.map(e => {
+        // Filter dates based on criteria
+        const filteredDates = e.dates.filter((d: any) => {
+          const eDate = new Date(d.date);
+          eDate.setHours(0, 0, 0, 0);
+          if (eDate.getTime() < filterDate.getTime()) return false;
+
+          if (horaInicio || horaFin) {
+            const eventTime = d.startTime;
+            if (horaInicio && horaFin) {
+              if (horaInicio > horaFin) return eventTime >= horaInicio || eventTime <= horaFin;
+              return eventTime >= horaInicio && eventTime <= horaFin;
+            }
+            if (horaInicio) return eventTime >= horaInicio;
+            if (horaFin) return eventTime <= horaFin;
+          }
+          return true;
+        });
+
+        // Use filtered dates if any, else original (though paginatedEvents are already filtered by date existence)
+        // Actually paginatedEvents only filtered by 'dates: { some: ... }' at DB level.
+        // We should format the event to only show relevant dates? 
+        // Or show all dates? User said "no solo el 4 seria el evento si no tambien el 5".
+        // Use all available dates for that event, sorted.
+        // But maybe we should stick to showing upcoming dates.
+
+        const validDates = filteredDates.length > 0 ? filteredDates : e.dates;
+
+        const sanitized = this.sanitizeEvent({ ...e, dates: validDates });
+        if (userId && (e as any).favorites?.length > 0) {
+          sanitized.favorito = (e as any).favorites[0].id;
+        } else {
+          sanitized.favorito = false;
+        }
+        return sanitized;
+      });
+
+      return {
+        eventos: events,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+      };
+    }
 
     // Expand events: create one entry per filtered date instead of one event with multiple dates
     const expandedEvents = paginatedEvents.flatMap((e) => {

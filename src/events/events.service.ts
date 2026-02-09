@@ -58,13 +58,19 @@ export class EventsService {
         userId,
         locationId,
         dates: {
-          create: dto.dates.map((d) => ({
-            date: new Date(d.date),
-            startTime: d.startTime,
-            endTime: d.endTime,
-            price: d.price,
-            capacity: d.capacity,
-          })),
+          create: dto.dates.map((d) => {
+            // Parse date string as local date to avoid timezone issues
+            const [year, month, day] = d.date.split('-').map(Number);
+            const localDate = new Date(year, month - 1, day);
+
+            return {
+              date: localDate,
+              startTime: d.startTime,
+              endTime: d.endTime,
+              price: d.price,
+              capacity: d.capacity,
+            };
+          }),
         },
       },
       include: {
@@ -580,14 +586,21 @@ export class EventsService {
     if (dto.dates && dto.dates.length > 0) {
       await this.prisma.eventDate.deleteMany({ where: { eventId: id } });
       await this.prisma.eventDate.createMany({
-        data: dto.dates.map((d) => ({
-          eventId: id,
-          date: new Date(d.date),
-          startTime: d.startTime,
-          endTime: d.endTime,
-          price: d.price,
-          capacity: d.capacity,
-        })),
+        data: dto.dates.map((d) => {
+          // Parse date string as local date to avoid timezone issues
+          // "2026-02-25" should be stored as Feb 25 regardless of timezone
+          const [year, month, day] = d.date.split('-').map(Number);
+          const localDate = new Date(year, month - 1, day);
+
+          return {
+            eventId: id,
+            date: localDate,
+            startTime: d.startTime,
+            endTime: d.endTime,
+            price: d.price,
+            capacity: d.capacity,
+          };
+        }),
       });
     }
 
@@ -862,21 +875,29 @@ export class EventsService {
       });
     });
 
-    // Sort chronologically by the next upcoming date (>= today)
+    // Sort chronologically by the next upcoming date (>= today OR >= fechaInicio)
     filteredEvents.sort((a, b) => {
       const getNextUpcomingDate = (e: any) => {
         if (!e.dates || e.dates.length === 0) return new Date(8640000000000000); // Far future
 
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
+        // Use fechaInicio as the reference date if provided, otherwise use today
+        // Parse carefully to avoid timezone issues
+        let referenceDate: Date;
+        if (fechaInicio) {
+          const [year, month, day] = fechaInicio.split('-').map(Number);
+          referenceDate = new Date(year, month - 1, day);
+        } else {
+          referenceDate = new Date();
+        }
+        referenceDate.setHours(0, 0, 0, 0);
 
-        // Find the next date >= today
+        // Find dates >= referenceDate
         const upcomingDates = e.dates
           .map((d: any) => new Date(d.date))
           .filter((date: Date) => {
             const compareDate = new Date(date);
             compareDate.setHours(0, 0, 0, 0);
-            return compareDate.getTime() >= now.getTime();
+            return compareDate.getTime() >= referenceDate.getTime();
           })
           .sort((a: Date, b: Date) => a.getTime() - b.getTime());
 
@@ -896,51 +917,68 @@ export class EventsService {
     const paginatedEvents = filteredEvents.slice(skip, skip + limit);
 
     // Filter dates within each event to only include dates >= filterDate AND matching time range
-    const filterDate = new Date(fechaInicio || new Date());
+    // IMPORTANT: Parse fechaInicio carefully to avoid timezone issues
+    // fechaInicio comes as "YYYY-MM-DD" but new Date("YYYY-MM-DD") treats it as UTC midnight
+    // which causes timezone conversion issues. We need to parse it as local date.
+    let filterDate: Date;
+    if (fechaInicio) {
+      const [year, month, day] = fechaInicio.split('-').map(Number);
+      filterDate = new Date(year, month - 1, day); // month is 0-indexed
+    } else {
+      filterDate = new Date();
+    }
     filterDate.setHours(0, 0, 0, 0);
 
-    return {
-      eventos: paginatedEvents.map((e) => {
-        // Filter the dates array to only include dates >= filterDate and matching time constraints
-        const filteredDates = e.dates.filter((d: any) => {
-          // Check date filter
-          const eDate = new Date(d.date);
-          eDate.setHours(0, 0, 0, 0);
-          if (eDate.getTime() < filterDate.getTime()) return false;
 
-          // Check time filter if horaInicio or horaFin is specified
-          if (horaInicio || horaFin) {
-            const eventTime = d.startTime; // e.g., "20:00"
 
-            if (horaInicio && horaFin) {
-              // Both start and end time specified
-              if (horaInicio > horaFin) {
-                // Crossover midnight: accept if time >= horaInicio OR time <= horaFin
-                return eventTime >= horaInicio || eventTime <= horaFin;
-              } else {
-                // Standard range: accept if time is between horaInicio and horaFin
-                return eventTime >= horaInicio && eventTime <= horaFin;
-              }
-            } else if (horaInicio) {
-              // Only start time: accept if time >= horaInicio
-              return eventTime >= horaInicio;
-            } else if (horaFin) {
-              // Only end time: accept if time <= horaFin
-              return eventTime <= horaFin;
+    // Expand events: create one entry per filtered date instead of one event with multiple dates
+    const expandedEvents = paginatedEvents.flatMap((e) => {
+      // Filter the dates array to only include dates >= filterDate and matching time constraints
+      const filteredDates = e.dates.filter((d: any) => {
+        // Check date filter
+        const eDate = new Date(d.date);
+        eDate.setHours(0, 0, 0, 0);
+        if (eDate.getTime() < filterDate.getTime()) return false;
+
+        // Check time filter if horaInicio or horaFin is specified
+        if (horaInicio || horaFin) {
+          const eventTime = d.startTime; // e.g., "20:00"
+
+          if (horaInicio && horaFin) {
+            // Both start and end time specified
+            if (horaInicio > horaFin) {
+              // Crossover midnight: accept if time >= horaInicio OR time <= horaFin
+              return eventTime >= horaInicio || eventTime <= horaFin;
+            } else {
+              // Standard range: accept if time is between horaInicio and horaFin
+              return eventTime >= horaInicio && eventTime <= horaFin;
             }
+          } else if (horaInicio) {
+            // Only start time: accept if time >= horaInicio
+            return eventTime >= horaInicio;
+          } else if (horaFin) {
+            // Only end time: accept if time <= horaFin
+            return eventTime <= horaFin;
           }
+        }
 
-          return true; // No time filter, accept
-        });
+        return true; // No time filter, accept
+      });
 
-        const sanitized = this.sanitizeEvent({ ...e, dates: filteredDates });
+      // Return one copy of the event per filtered date
+      return filteredDates.map((date) => {
+        const sanitized = this.sanitizeEvent({ ...e, dates: [date] });
         if (userId && (e as any).favorites?.length > 0) {
           sanitized.favorito = (e as any).favorites[0].id;
         } else {
           sanitized.favorito = false;
         }
         return sanitized;
-      }),
+      });
+    });
+
+    return {
+      eventos: expandedEvents,
       total,
       page,
       totalPages: Math.ceil(total / limit),

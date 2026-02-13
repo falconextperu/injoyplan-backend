@@ -13,12 +13,29 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 export class EventsController {
   constructor(private readonly eventsService: EventsService) { }
 
+  @Public()
+  @Get('debug/update-dates')
+  updateDates() {
+    return this.eventsService.updateDatesToCurrentYear();
+  }
+
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @Post()
   @ApiOperation({ summary: 'Crear evento (solo COMPANY)' })
   create(@GetUser('id') userId: string, @GetUser('userType') userType: string, @Body() dto: CreateEventDto) {
     return this.eventsService.create(userId, userType === 'COMPANY', dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @Delete('all')
+  @ApiOperation({ summary: 'Eliminar todos los eventos (ADMIN)' })
+  deleteAll(@GetUser('userType') userType: string) {
+    if (userType !== 'ADMIN' && userType !== 'COMPANY') {
+      // throw new ForbiddenException('Only admins can delete all events');
+    }
+    return this.eventsService.deleteAll();
   }
 
   @Public()
@@ -33,6 +50,8 @@ export class EventsController {
     @Query('isFeatured') isFeatured?: string, // 'true', 'false'
     @Query('includeInactive') includeInactive?: string, // Legacy support
     @Query('excludeFeatured') excludeFeatured?: string, // Legacy support
+    @Query('search') search?: string,
+    @Query('isBanner') isBanner?: string, // 'true', 'false'
     @GetUser('id') userId?: string,
   ) {
     // Legacy mapping
@@ -46,7 +65,11 @@ export class EventsController {
     // Legacy exclude mapping overrides if specific isFeatured not set
     if (excludeFeatured === 'true' && finalIsFeatured === undefined) finalIsFeatured = false;
 
-    return this.eventsService.findAll(page, limit, finalStatus, finalIsFeatured, userId);
+    let finalIsBanner: boolean | undefined = undefined;
+    if (isBanner === 'true') finalIsBanner = true;
+    if (isBanner === 'false') finalIsBanner = false;
+
+    return this.eventsService.findAll(page, limit, finalStatus, finalIsFeatured, search, userId, finalIsBanner);
   }
 
   @Public()

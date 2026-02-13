@@ -3,9 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class FavoritesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
-  async addFavorite(userId: string, eventId: string) {
+  async addFavorite(userId: string, eventId: string, eventDateId?: string) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
     });
@@ -14,16 +14,33 @@ export class FavoritesService {
       throw new NotFoundException('Evento no encontrado');
     }
 
+    // Check for existing favorite with exact same parameters
     const existing = await this.prisma.favorite.findUnique({
       where: {
-        userId_eventId: {
+        userId_eventId_eventDateId: {
           userId,
           eventId,
+          eventDateId: eventDateId ?? "", // Prisma usually needs handling for composite unique with nulls, but let's test. 
+          // Actually, standard Prisma unique constraint with nullable fields requires generated field or findFirst. 
+          // Wait, I defined @@unique([userId, eventId, eventDateId]).
+          // But if eventDateId is optional (String?), checking unique might be tricky if it's null.
+          // However, if I pass `eventDateId: eventDateId` and it's undefined, prisma might treat it as absent?
+          // No, validation says it expects string or null.
         },
       },
     });
 
-    if (existing) {
+    // WORKAROUND: For nullable specific unique constraints, findFirst is safer if generated types are complex
+    // But since I enabled the constraint, let's try findFirst to be safe and clear.
+    const existingSafe = await this.prisma.favorite.findFirst({
+      where: {
+        userId,
+        eventId,
+        eventDateId: eventDateId || null
+      }
+    });
+
+    if (existingSafe) {
       throw new ConflictException('El evento ya está en favoritos');
     }
 
@@ -31,6 +48,7 @@ export class FavoritesService {
       data: {
         userId,
         eventId,
+        eventDateId: eventDateId || null,
       },
       include: {
         event: {
@@ -44,6 +62,7 @@ export class FavoritesService {
             dates: true,
           },
         },
+        eventDate: true,
       },
     });
   }
@@ -69,22 +88,24 @@ export class FavoritesService {
   }
 
   async removeFavoriteByEvent(userId: string, eventId: string) {
-    const favorite = await this.prisma.favorite.findUnique({
+    // This removes ALL favorites for this event by this user
+    // Or should it?
+    // Legacy behavior: remove unique [userId, eventId]. 
+    // New behavior: Remove ALL instances? Or just general one?
+    // Usually "toggle off" removes the specific one. 
+    // But if called without dateId... 
+
+    // Providing a "delete many" is safer to clear all favorites for this event
+    const result = await this.prisma.favorite.deleteMany({
       where: {
-        userId_eventId: {
-          userId,
-          eventId,
-        },
-      },
+        userId,
+        eventId
+      }
     });
 
-    if (!favorite) {
+    if (result.count === 0) {
       throw new NotFoundException('Favorito no encontrado');
     }
-
-    await this.prisma.favorite.delete({
-      where: { id: favorite.id },
-    });
 
     return { message: 'Favorito eliminado exitosamente' };
   }
@@ -96,6 +117,7 @@ export class FavoritesService {
       this.prisma.favorite.findMany({
         where: { userId },
         include: {
+          eventDate: true, // Include the specific date relation
           event: {
             include: {
               user: {
@@ -122,8 +144,46 @@ export class FavoritesService {
       }),
     ]);
 
+    const mappedFavorites = favorites.map(fav => {
+      const event = fav.event;
+      if (!event || !event.dates) return fav;
+
+      // Logic: If favorite has a specific eventDateId, show THAT date.
+      // Else, show upcoming future dates logic.
+
+      let finalDates = event.dates;
+
+      if (fav.eventDateId && fav.eventDate) {
+        // If specific date is favorited, ONLY return that date in the list
+        // This ensures the UI renders exactly that date card
+        finalDates = [fav.eventDate];
+      } else {
+        // Fallback to "Upcoming" logic
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const upcomingDates = event.dates.filter(d => {
+          const date = new Date(d.date);
+          date.setHours(0, 0, 0, 0);
+          return date.getTime() >= today.getTime();
+        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        const allDates = event.dates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        finalDates = upcomingDates.length > 0 ? upcomingDates : allDates;
+      }
+
+      return {
+        ...fav,
+        event: {
+          ...event,
+          dates: finalDates
+        }
+      };
+    });
+
     return {
-      data: favorites,
+      data: mappedFavorites,
       total,
       page,
       totalPages: Math.ceil(total / limit),

@@ -246,14 +246,28 @@ export class AdminService {
         const priceMap = new Map();
         entradas.forEach(r => priceMap.set(r.idRow, r.Precio));
 
-        const urlMap = new Map();
-        plataformas.forEach(r => urlMap.set(r.idRow, r.URVenta));
+        // Ticket URLs Map (Multiple entries per event)
+        const ticketMap = new Map<any, { name: string, url: string }[]>();
+        plataformas.forEach(r => {
+            if (!r.URVenta) return;
+            if (!ticketMap.has(r.idRow)) ticketMap.set(r.idRow, []);
+
+            let name = r.Nombre || 'Entrada';
+            // Clean up name if needed, or keep as is from Excel
+            // User requested "joinnus", "whatsapp 1", etc. so we trust the Excel "Nombre" column usually
+            // Just basic fallback if empty.
+
+            ticketMap.get(r.idRow)?.push({ name, url: r.URVenta });
+        });
 
         const dateMap = new Map<any, any[]>();
         fechas.forEach(r => {
             if (!dateMap.has(r.idRow)) dateMap.set(r.idRow, []);
             dateMap.get(r.idRow)?.push(r);
         });
+
+        // Legacy urlMap for single websiteUrl fallback (take the first one if exists)
+        // But user wants PlataformaURLnbbb as main.
 
         const adminUser = await this.getAdminUser();
         let count = 0;
@@ -278,7 +292,7 @@ export class AdminService {
 
                 const datesList = dateMap.get(idRow) || [];
                 const price = priceMap.get(idRow);
-                const datesFormatted = datesList.map(d => {
+                const datesFormatted = datesList.flatMap(d => {
                     let dateObj = new Date();
                     // Handle Excel serial date
                     if (typeof d.Fecha === 'number') {
@@ -286,12 +300,38 @@ export class AdminService {
                     } else if (d.Fecha) {
                         dateObj = new Date(d.Fecha);
                     }
-                    return {
-                        date: dateObj,
-                        startTime: d.HoraInicio ? String(d.HoraInicio) : undefined,
-                        price: price ? Number(price) : 0
-                    };
-                }).filter(d => !isNaN(d.date.getTime()));
+
+                    // Fix Timezone: Set to Noon UTC to avoid shifting to previous day
+                    dateObj.setUTCHours(12, 0, 0, 0);
+
+                    if (isNaN(dateObj.getTime())) return [];
+
+                    const timeString = d.HoraInicio ? String(d.HoraInicio) : '';
+                    // Split multiple ranges "17:00-18:30;20:30-22:00"
+                    const ranges = timeString.split(';').map(t => t.trim()).filter(Boolean);
+
+                    if (ranges.length === 0) {
+                        return [{
+                            date: dateObj,
+                            startTime: null,
+                            endTime: null,
+                            price: price ? Number(price) : 0
+                        }];
+                    }
+
+                    return ranges.map(range => {
+                        const [start, end] = range.split('-').map(t => t.trim());
+                        return {
+                            date: dateObj,
+                            startTime: start || null,
+                            endTime: end || null,
+                            price: price ? Number(price) : 0
+                        };
+                    });
+                });
+
+                // Prioritize PlataformaURLnbbb from Event sheet, fallback to first entry in Platform sheet
+                const mainWebsiteUrl = evt.PlataformaURLnbbb || evt.URLWeb || (ticketMap.get(idRow)?.[0]?.url) || null;
 
                 await this.prisma.event.create({
                     data: {
@@ -299,17 +339,21 @@ export class AdminService {
                         description: evt.DescripcionEvento || evt['DescripciónEvento'] || evt.Description || evt.Descripcion || '',
                         category: evt.Categoria || 'General',
                         isFeatured: Number(evt.Destacado) === 1 || String(evt.Destacado).toLowerCase() === 'si' || evt.Destacado === true,
+                        isBanner: Number(evt.esBaner) === 1 || String(evt.esBaner).toLowerCase() === 'si' || evt.esBaner === true,
                         isActive: true,
                         imageUrl: imgMap.get(idRow) || null,
-                        websiteUrl: urlMap.get(idRow) || null,
+                        websiteUrl: mainWebsiteUrl,
+                        ticketUrls: ticketMap.get(idRow) || [], // Save all ticket links
                         user: { connect: { id: adminUser.id } },
                         location: {
                             create: {
                                 name: evt.NombreLocal || 'Por definir',
                                 address: evt['Dirección'] || evt.Direccion || null,
-                                department: evt.Departamento ? String(evt.Departamento) : 'Lima',
-                                province: evt.Provincia ? String(evt.Provincia) : 'Lima',
-                                district: evt.Distrito ? String(evt.Distrito) : ''
+                                department: evt.Departamento ? String(evt.Departamento).trim() : 'Lima',
+                                province: evt.Provincia ? String(evt.Provincia).trim() : 'Lima',
+                                district: evt.Distrito ? String(evt.Distrito).trim() : '',
+                                latitude: evt.latitud_longitud ? parseFloat(String(evt.latitud_longitud).split(',')[0]) : null,
+                                longitude: evt.latitud_longitud ? parseFloat(String(evt.latitud_longitud).split(',')[1]) : null
                             }
                         },
                         dates: datesFormatted.length > 0 ? { create: datesFormatted } : undefined

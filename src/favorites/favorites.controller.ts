@@ -10,7 +10,7 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class FavoritesController {
-  constructor(private readonly favoritesService: FavoritesService) {}
+  constructor(private readonly favoritesService: FavoritesService) { }
 
   @Post()
   @ApiOperation({ summary: 'Agregar evento a favoritos' })
@@ -18,7 +18,7 @@ export class FavoritesController {
     @GetUser('id') userId: string,
     @Body() createFavoriteDto: CreateFavoriteDto,
   ) {
-    return this.favoritesService.addFavorite(userId, createFavoriteDto.eventId);
+    return this.favoritesService.addFavorite(userId, createFavoriteDto.eventId, createFavoriteDto.eventDateId);
   }
 
   @Get()

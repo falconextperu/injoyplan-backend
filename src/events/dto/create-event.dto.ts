@@ -78,6 +78,11 @@ export class CreateEventDto {
   @IsOptional()
   isFeatured?: boolean;
 
+  @ApiProperty({ required: false })
+  @IsBoolean()
+  @IsOptional()
+  isBanner?: boolean;
+
   @ApiProperty({ description: 'Fechas del evento', type: [CreateEventDateDto] })
   @IsArray()
   @ValidateNested({ each: true })

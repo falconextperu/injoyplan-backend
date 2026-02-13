@@ -151,6 +151,7 @@ model Event {
   ticketUrls  Json?    // Array of {name: string, url: string} for multiple links
   isActive    Boolean  @default(true)
   isFeatured  Boolean  @default(false)
+  isBanner    Boolean  @default(false)
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   locationId  String?
@@ -163,6 +164,7 @@ model Event {
 
   @@index([isActive])
   @@index([isFeatured])
+  @@index([isBanner])
   @@index([category])
   @@index([isActive, isFeatured])
   @@map("events")
@@ -178,6 +180,7 @@ model EventDate {
   price     Float?
   capacity  Int?
   createdAt DateTime @default(now())
+  favorites Favorite[]
 
   @@index([eventId])
   @@index([date])
@@ -207,11 +210,13 @@ model Favorite {
   id        String   @id @default(uuid())
   userId    String
   eventId   String
+  eventDateId String?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventDate EventDate? @relation(fields: [eventDateId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
-  @@unique([userId, eventId])
+  @@unique([userId, eventId, eventDateId])
   @@map("favorites")
 }
 

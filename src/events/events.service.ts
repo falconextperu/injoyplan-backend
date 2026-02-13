@@ -24,6 +24,39 @@ export class EventsService {
     return { ...sanitized, favorito: isFavorite };
   }
 
+  async updateDatesToCurrentYear() {
+    const dates = await this.prisma.eventDate.findMany();
+    const currentYear = new Date().getFullYear();
+    let updated = 0;
+
+    for (const d of dates) {
+      const newDate = new Date(d.date);
+      if (newDate.getFullYear() < currentYear) {
+        newDate.setFullYear(currentYear);
+        newDate.setUTCHours(12);
+        await this.prisma.eventDate.update({
+          where: { id: d.id },
+          data: { date: newDate }
+        });
+        updated++;
+      }
+    }
+    return { message: `Updated ${updated} dates to ${currentYear}` };
+  }
+
+  async deleteAll() {
+    try {
+      // Attempt to delete all events. 
+      // If there are foreign key constraints without cascade delete, this might fail.
+      // But typically for this project structure, cascade should be enabled or cleaning up is straightforward.
+      const result = await this.prisma.event.deleteMany({});
+      return { success: true, count: result.count, message: 'Todos los eventos han sido eliminados' };
+    } catch (error) {
+      console.error('Error deleting all events:', error);
+      throw new BadRequestException('No se pudieron eliminar los eventos');
+    }
+  }
+
   async create(userId: string, isCompany: boolean, dto: CreateEventDto) {
     if (!isCompany) {
       throw new ForbiddenException('Solo usuarios COMPANY pueden crear eventos');
@@ -55,6 +88,7 @@ export class EventsService {
         websiteUrl: dto.websiteUrl,
         ticketUrls: dto.ticketUrls || undefined,
         isFeatured: dto.isFeatured ?? false,
+        isBanner: dto.isBanner ?? false,
         userId,
         locationId,
         dates: {
@@ -83,7 +117,7 @@ export class EventsService {
     return this.sanitizeEvent(event);
   }
 
-  async findAll(page = 1, limit = 20, status = 'active', isFeatured?: boolean, userId?: string) {
+  async findAll(page = 1, limit = 20, status = 'active', isFeatured?: boolean, search?: string, userId?: string, isBanner?: boolean) {
     const skip = (page - 1) * limit;
 
     const whereClause: any = {};
@@ -97,6 +131,18 @@ export class EventsService {
 
     if (isFeatured !== undefined) {
       whereClause.isFeatured = isFeatured;
+    }
+
+    if (isBanner !== undefined) {
+      whereClause.isBanner = isBanner;
+    }
+
+    if (search) {
+      whereClause.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { location: { name: { contains: search, mode: 'insensitive' } } },
+      ];
     }
 
     const [data, total] = await Promise.all([
@@ -615,6 +661,7 @@ export class EventsService {
         websiteUrl: dto.websiteUrl,
         ticketUrls: dto.ticketUrls !== undefined ? dto.ticketUrls : undefined,
         isFeatured: dto.isFeatured,
+        isBanner: dto.isBanner,
         locationId,
       },
       include: { dates: true, location: true },
@@ -859,12 +906,9 @@ export class EventsService {
 
     let filteredEvents = allMatchingEvents;
 
-    // Filter out past events: Keep event only if it has at least one future or current date
-    // We'll filter the actual dates array later before returning
+    // Filter out past events first
     filteredEvents = filteredEvents.filter(event => {
       if (!event.dates || event.dates.length === 0) return false;
-
-      // Use fechaInicio if provided, otherwise use today
       const checkDate = new Date(fechaInicio || new Date());
       checkDate.setHours(0, 0, 0, 0);
 
@@ -872,75 +916,89 @@ export class EventsService {
         const eventDate = new Date(d.date);
         const eDate = new Date(eventDate);
         eDate.setHours(0, 0, 0, 0);
+
+        // Time filter pre-check optimization? No, just check date overlap here.
         return eDate.getTime() >= checkDate.getTime();
       });
     });
 
-    // Sort chronologically by the next upcoming date (>= today OR >= fechaInicio)
-    filteredEvents.sort((a, b) => {
-      const getNextUpcomingDate = (e: any) => {
-        if (!e.dates || e.dates.length === 0) return new Date(8640000000000000); // Far future
+    let resultItems: any[] = [];
 
-        // Use fechaInicio as the reference date if provided, otherwise use today
-        // Parse carefully to avoid timezone issues
-        let referenceDate: Date;
-        if (fechaInicio) {
-          const [year, month, day] = fechaInicio.split('-').map(Number);
-          referenceDate = new Date(year, month - 1, day);
-        } else {
-          referenceDate = new Date();
-        }
-        referenceDate.setHours(0, 0, 0, 0);
-
-        // Find dates >= referenceDate
-        const upcomingDates = e.dates
-          .map((d: any) => new Date(d.date))
-          .filter((date: Date) => {
-            const compareDate = new Date(date);
-            compareDate.setHours(0, 0, 0, 0);
-            return compareDate.getTime() >= referenceDate.getTime();
-          })
-          .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-
-        // Return the earliest upcoming date, or far future if none
-        return upcomingDates.length > 0 ? upcomingDates[0] : new Date(8640000000000000);
-      };
-
-      const dateA = getNextUpcomingDate(a);
-      const dateB = getNextUpcomingDate(b);
-
-      return dateA.getTime() - dateB.getTime();
-    })
-
-      ;
-
-    const total = filteredEvents.length;
-    const paginatedEvents = filteredEvents.slice(skip, skip + limit);
-
-    // Filter dates within each event to only include dates >= filterDate AND matching time range
-    // IMPORTANT: Parse fechaInicio carefully to avoid timezone issues
-    // fechaInicio comes as "YYYY-MM-DD" but new Date("YYYY-MM-DD") treats it as UTC midnight
-    // which causes timezone conversion issues. We need to parse it as local date.
+    // Parse filterDate once
     let filterDate: Date;
     if (fechaInicio) {
       const [year, month, day] = fechaInicio.split('-').map(Number);
-      filterDate = new Date(year, month - 1, day); // month is 0-indexed
+      filterDate = new Date(year, month - 1, day);
     } else {
       filterDate = new Date();
     }
     filterDate.setHours(0, 0, 0, 0);
 
-
-
-    // If expandDates is false, return unique events (without date expansion)
-    if (!expandDates) {
-      const events = paginatedEvents.map(e => {
-        // Filter dates based on criteria
-        const filteredDates = e.dates.filter((d: any) => {
+    if (expandDates) {
+      // 1. Expand ALL matching events into individual date instances
+      resultItems = filteredEvents.flatMap((e) => {
+        // Filter dates just like before
+        const validDates = e.dates.filter((d: any) => {
           const eDate = new Date(d.date);
           eDate.setHours(0, 0, 0, 0);
           if (eDate.getTime() < filterDate.getTime()) return false;
 
+          if (horaInicio || horaFin) {
+            const eventTime = d.startTime;
+            if (horaInicio && horaFin) {
+              if (horaInicio > horaFin) return eventTime >= horaInicio || eventTime <= horaFin;
+              return eventTime >= horaInicio && eventTime <= horaFin;
+            } else if (horaInicio) return eventTime >= horaInicio;
+            else if (horaFin) return eventTime <= horaFin;
+          }
+          return true;
+        });
+
+        // Map each valid date to a sanitized event instance
+        return validDates.map((date) => {
+          const sanitized = this.sanitizeEvent({ ...e, dates: [date] });
+          if (userId && (e as any).favorites?.length > 0) {
+            sanitized.favorito = (e as any).favorites[0].id;
+          } else {
+            sanitized.favorito = false;
+          }
+          // Attach sorting key for easier sort
+          (sanitized as any)._sortDate = new Date(date.date).getTime();
+          return sanitized;
+        });
+      });
+
+      // 2. Sort the expanded list
+      resultItems.sort((a, b) => a._sortDate - b._sortDate);
+
+    } else {
+      // Logic for non-expanded (grouped) events
+      // Sort chronologically by the next upcoming date 
+      filteredEvents.sort((a, b) => {
+        const getNextUpcomingDate = (e: any) => {
+          if (!e.dates || e.dates.length === 0) return new Date(8640000000000000);
+          let referenceDate = new Date(filterDate);
+          const upcomingDates = e.dates
+            .map((d: any) => new Date(d.date))
+            .filter((date: Date) => {
+              const compareDate = new Date(date);
+              compareDate.setHours(0, 0, 0, 0);
+              return compareDate.getTime() >= referenceDate.getTime();
+            })
+            .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+          return upcomingDates.length > 0 ? upcomingDates[0] : new Date(8640000000000000);
+        };
+        const dateA = getNextUpcomingDate(a);
+        const dateB = getNextUpcomingDate(b);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      // Filter inner dates and verify if event still has active dates with filters
+      resultItems = filteredEvents.map(e => {
+        const validDates = e.dates.filter((d: any) => {
+          const eDate = new Date(d.date);
+          eDate.setHours(0, 0, 0, 0);
+          if (eDate.getTime() < filterDate.getTime()) return false;
           if (horaInicio || horaFin) {
             const eventTime = d.startTime;
             if (horaInicio && horaFin) {
@@ -952,16 +1010,9 @@ export class EventsService {
           }
           return true;
         });
+        if (validDates.length === 0) return null; // Remove if no valid dates remain after filter
 
-        // Use filtered dates if any, else original (though paginatedEvents are already filtered by date existence)
-        // Actually paginatedEvents only filtered by 'dates: { some: ... }' at DB level.
-        // We should format the event to only show relevant dates? 
-        // Or show all dates? User said "no solo el 4 seria el evento si no tambien el 5".
-        // Use all available dates for that event, sorted.
-        // But maybe we should stick to showing upcoming dates.
-
-        const validDates = filteredDates.length > 0 ? filteredDates : e.dates;
-
+        // Use active dates for display? Or all? Usually just the valid ones for this search.
         const sanitized = this.sanitizeEvent({ ...e, dates: validDates });
         if (userId && (e as any).favorites?.length > 0) {
           sanitized.favorito = (e as any).favorites[0].id;
@@ -969,64 +1020,15 @@ export class EventsService {
           sanitized.favorito = false;
         }
         return sanitized;
-      });
-
-      return {
-        eventos: events,
-        total,
-        page,
-        totalPages: Math.ceil(total / limit),
-      };
+      }).filter(Boolean); // Filter out nulls
     }
 
-    // Expand events: create one entry per filtered date instead of one event with multiple dates
-    const expandedEvents = paginatedEvents.flatMap((e) => {
-      // Filter the dates array to only include dates >= filterDate and matching time constraints
-      const filteredDates = e.dates.filter((d: any) => {
-        // Check date filter
-        const eDate = new Date(d.date);
-        eDate.setHours(0, 0, 0, 0);
-        if (eDate.getTime() < filterDate.getTime()) return false;
-
-        // Check time filter if horaInicio or horaFin is specified
-        if (horaInicio || horaFin) {
-          const eventTime = d.startTime; // e.g., "20:00"
-
-          if (horaInicio && horaFin) {
-            // Both start and end time specified
-            if (horaInicio > horaFin) {
-              // Crossover midnight: accept if time >= horaInicio OR time <= horaFin
-              return eventTime >= horaInicio || eventTime <= horaFin;
-            } else {
-              // Standard range: accept if time is between horaInicio and horaFin
-              return eventTime >= horaInicio && eventTime <= horaFin;
-            }
-          } else if (horaInicio) {
-            // Only start time: accept if time >= horaInicio
-            return eventTime >= horaInicio;
-          } else if (horaFin) {
-            // Only end time: accept if time <= horaFin
-            return eventTime <= horaFin;
-          }
-        }
-
-        return true; // No time filter, accept
-      });
-
-      // Return one copy of the event per filtered date
-      return filteredDates.map((date) => {
-        const sanitized = this.sanitizeEvent({ ...e, dates: [date] });
-        if (userId && (e as any).favorites?.length > 0) {
-          sanitized.favorito = (e as any).favorites[0].id;
-        } else {
-          sanitized.favorito = false;
-        }
-        return sanitized;
-      });
-    });
+    const total = resultItems.length;
+    // 3. Paginate the FINAL list
+    const paginatedItems = resultItems.slice(skip, skip + limit);
 
     return {
-      eventos: expandedEvents,
+      eventos: paginatedItems,
       total,
       page,
       totalPages: Math.ceil(total / limit),

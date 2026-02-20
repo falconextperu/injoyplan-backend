@@ -256,10 +256,10 @@ export class AdminService {
             const urlLower = (r.URVenta || '').toLowerCase();
             const nameLower = name.toLowerCase();
 
-            // List of known/generic names that can be overridden if URL implies something else
-            const overridable = ['web', 'website', 'entrada', 'entradas', 'ticket', 'tickets', 'joinnus', 'teleticket', 'ticketmaster', 'passline', 'atrapalo', 'instagram', 'facebook', 'tiktok', 'whatsapp'];
+            // Only override if name is purely generic (user didn't specify a real platform name)
+            const overridable = ['entrada', 'entradas', 'ticket', 'tickets'];
 
-            if (overridable.some(o => o === nameLower)) {
+            if (!name || overridable.includes(nameLower)) {
                 if (urlLower.includes('wa.me') || urlLower.includes('whatsapp')) {
                     name = 'WhatsApp';
                 } else if (urlLower.includes('instagram')) {
@@ -355,20 +355,8 @@ export class AdminService {
                 // Prioritize PlataformaURL from Event sheet, fallback to first entry in Platform sheet
                 const mainWebsiteUrl = plataformaUrl || evt.URLWeb || (ticketMap.get(idRow)?.[0]?.url) || null;
 
-                // Ensure PlataformaURL is also in ticketUrls (for buttons)
+                // Only use entries from the PlataformaVenta sheet as ticket URLs
                 const finalTicketUrls = [...(ticketMap.get(idRow) || [])];
-                if (plataformaUrl && !finalTicketUrls.some((t: any) => t.url === plataformaUrl)) {
-                    let name = 'Web';
-                    const lowerUrl = plataformaUrl.toLowerCase();
-                    if (lowerUrl.includes('instagram')) name = 'Instagram';
-                    else if (lowerUrl.includes('whatsapp') || lowerUrl.includes('wa.me')) name = 'WhatsApp';
-                    else if (lowerUrl.includes('tiktok')) name = 'TikTok';
-                    else if (lowerUrl.includes('facebook')) name = 'Facebook';
-                    else if (lowerUrl.includes('joinnus')) name = 'Joinnus';
-                    else if (lowerUrl.includes('teleticket')) name = 'Teleticket';
-
-                    finalTicketUrls.unshift({ name, url: plataformaUrl });
-                }
 
                 await this.prisma.event.create({
                     data: {
@@ -384,8 +372,12 @@ export class AdminService {
                         user: { connect: { id: adminUser.id } },
                         location: {
                             create: {
-                                name: (evt.NombreLocal ? `${evt.NombreLocal}${evt.NroLocal ? ' ' + evt.NroLocal : ''}` : 'Por definir'),
-                                address: evt['Dirección'] || evt.Direccion || null,
+                                name: evt.NombreLocal || 'Por definir',
+                                address: (() => {
+                                    const baseAddr = evt['Dirección'] || evt.Direccion || '';
+                                    const num = evt.NroLocal ? ` ${evt.NroLocal}` : '';
+                                    return (baseAddr + num).trim() || null;
+                                })(),
                                 department: evt.Departamento ? String(evt.Departamento).trim() : 'Lima',
                                 province: evt.Provincia ? String(evt.Provincia).trim() : 'Lima',
                                 district: evt.Distrito ? String(evt.Distrito).trim() : '',

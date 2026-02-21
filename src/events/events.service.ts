@@ -93,12 +93,15 @@ export class EventsService {
         locationId,
         dates: {
           create: dto.dates.map((d) => {
-            // Parse date string as local date to avoid timezone issues
+            // Force noon UTC to avoid timezone date-shift issues.
+            // On Railway (UTC server), new Date(y,m,d) creates T00:00:00Z (UTC midnight)
+            // which appears as the previous day at 7pm in Lima (UTC-5).
+            // Storing at T12:00:00Z (noon UTC = 7am Lima) keeps the date correct in all timezones.
             const [year, month, day] = d.date.split('-').map(Number);
-            const localDate = new Date(year, month - 1, day);
+            const dateObj = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
 
             return {
-              date: localDate,
+              date: dateObj,
               startTime: d.startTime,
               endTime: d.endTime,
               price: d.price,

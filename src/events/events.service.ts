@@ -44,6 +44,24 @@ export class EventsService {
     return { message: `Updated ${updated} dates to ${currentYear}` };
   }
 
+  // Fix all dates stored at UTC midnight (T00:00:00Z) to noon UTC (T12:00:00Z).
+  // Events created via admin UI on Railway (UTC server) were stored at midnight,
+  // which appears as the previous day at 7pm in Lima (UTC-5).
+  async fixDatesToNoonUTC() {
+    const dates = await this.prisma.eventDate.findMany();
+    let updated = 0;
+    for (const d of dates) {
+      const stored = new Date(d.date);
+      if (stored.getUTCHours() < 6) {
+        const fixed = new Date(stored);
+        fixed.setUTCHours(12, 0, 0, 0);
+        await this.prisma.eventDate.update({ where: { id: d.id }, data: { date: fixed } });
+        updated++;
+      }
+    }
+    return { message: `Fixed ${updated} event dates to noon UTC` };
+  }
+
   async deleteAll() {
     try {
       // Attempt to delete all events. 

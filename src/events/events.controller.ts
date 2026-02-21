@@ -19,6 +19,12 @@ export class EventsController {
     return this.eventsService.updateDatesToCurrentYear();
   }
 
+  @Public()
+  @Get('debug/fix-noon-utc')
+  fixNoonUTC() {
+    return this.eventsService.fixDatesToNoonUTC();
+  }
+
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @Post()
